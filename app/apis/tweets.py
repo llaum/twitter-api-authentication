@@ -1,6 +1,6 @@
 from flask_restplus import Namespace, Resource, fields
-from flask import abort
-from app.models import Tweet
+from flask import abort, request
+from app.models import Tweet, User
 from app import db
 
 api = Namespace('tweets')
@@ -38,21 +38,33 @@ class TweetResource(Resource):
     @api.marshal_with(json_tweet, code=200)
     @api.expect(json_new_tweet, validate=True)
     def patch(self, id):
-        tweet = db.session.query(Tweet).get(id)
-        if tweet is None:
-            api.abort(404, "Tweet {} doesn't exist".format(id))
+        api_key = request.headers.get('Authorization')
+        if api_key is None:
+            return abort(401)
+        elif User.query.filter_by(api_key=api_key).first() is not None:
+            tweet = db.session.query(Tweet).get(id)
+            if tweet is None:
+                api.abort(404, "Tweet {} doesn't exist".format(id))
+            else:
+                tweet.text = api.payload["text"]
+                return tweet
         else:
-            tweet.text = api.payload["text"]
-            return tweet
+            return abort(401)
 
     def delete(self, id):
-        tweet = db.session.query(Tweet).get(id)
-        if tweet is None:
-            api.abort(404, "Tweet {} doesn't exist".format(id))
+        api_key = request.headers.get('Authorization')
+        if api_key is None:
+            return abort(401)
+        if User.query.filter_by(api_key=api_key).first() is not None:
+            tweet = db.session.query(Tweet).get(id)
+            if tweet is None:
+                api.abort(404, "Tweet {} doesn't exist".format(id))
+            else:
+                db.session.delete(tweet)
+                db.session.commit()
+                return None
         else:
-            db.session.delete(tweet)
-            db.session.commit()
-            return None
+            return abort(401)
 
 @api.route('')
 class TweetsResource(Resource):
@@ -60,16 +72,24 @@ class TweetsResource(Resource):
     @api.expect(json_new_tweet, validate=True)
     @api.response(422, 'Invalid tweet')
     def post(self):
-        text = api.payload["text"]
-        if len(text) > 0:
-            tweet = Tweet(text=text)
-            db.session.add(tweet)
-            db.session.commit()
-            return tweet, 201
+        api_key = request.headers.get('Authorization')
+        #api_key = request.args['api_key']
+        if api_key is None:
+            return abort(401)
+        elif User.query.filter_by(api_key=api_key).first() is not None:
+            text = api.payload["text"]
+            if len(text) > 0:
+                tweet = Tweet(text=text)
+                db.session.add(tweet)
+                db.session.commit()
+                return tweet, 201
+            else:
+                return abort(422, "Tweet text can't be empty")
         else:
-            return abort(422, "Tweet text can't be empty")
+            return abort(401)
 
     @api.marshal_list_with(json_tweet)
     def get(self):
         tweets = db.session.query(Tweet).all()
         return tweets
+

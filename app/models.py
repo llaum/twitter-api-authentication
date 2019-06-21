@@ -1,5 +1,7 @@
 from datetime import datetime
 from sqlalchemy.schema import ForeignKey
+from sqlalchemy.event import listens_for
+import secrets
 
 from app import db
 
@@ -24,3 +26,12 @@ class User(db.Model):
 
     def __repr__(self):
         return f"<User {self.username}>"
+
+    def generate_api_key(self):
+        if not self.api_key:
+            self.api_key = secrets.token_urlsafe(56)
+        return self.api_key
+
+@listens_for(User, 'before_insert')
+def generate_api_key_before_insert(mapper, connect, target):
+    target.generate_api_key()

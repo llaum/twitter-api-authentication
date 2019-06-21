@@ -32,7 +32,8 @@ class TestTweetViews(TestCase):
         self.assertEqual(tweets[1]['user']['username'], "ssaunier")
 
     def test_tweet_show(self):
-        first_tweet = Tweet(text="First tweet")
+        user = User(username='ssaunier')
+        first_tweet = Tweet(text="First tweet", user=user)
         db.session.add(first_tweet)
         db.session.commit()
         response = self.client.get("/tweets/1")
@@ -42,26 +43,48 @@ class TestTweetViews(TestCase):
         self.assertIsNotNone(response_tweet["created_at"])
 
     def test_tweet_create(self):
-        response = self.client.post("/tweets", json={'text': 'New tweet!'})
+        user = User(username='ssaunier')
+        db.session.add(user)
+        db.session.commit()
+        response = self.client.post("/tweets", json={'text': 'New tweet!'}, headers={'Authorization': user.api_key})
         created_tweet = response.json
         self.assertEqual(response.status_code, 201)
         self.assertEqual(created_tweet["id"], 1)
         self.assertEqual(created_tweet["text"], "New tweet!")
 
     def test_tweet_update(self):
+        user = User(username='ssaunier')
+        db.session.add(user)
+        db.session.commit()
         first_tweet = Tweet(text="First tweet")
         db.session.add(first_tweet)
         db.session.commit()
-        response = self.client.patch("/tweets/1", json={'text': 'New text'})
+        response = self.client.patch("/tweets/1", json={'text': 'New text'}, headers={'Authorization': user.api_key})
         updated_tweet = response.json
         self.assertEqual(response.status_code, 200)
         self.assertEqual(updated_tweet["id"], 1)
         self.assertEqual(updated_tweet["text"], "New text")
 
     def test_tweet_delete(self):
+        user = User(username='ssaunier')
+        db.session.add(user)
+        db.session.commit()
         first_tweet = Tweet(text="First tweet")
         db.session.add(first_tweet)
         db.session.commit()
-        self.client.delete("/tweets/1")
+        self.client.delete("/tweets/1", headers={'Authorization': user.api_key})
         self.assertIsNone(db.session.query(Tweet).get(1))
 
+    def test_tweet_delete_without_auhth_header(self):
+        first_tweet = Tweet(text="First tweet")
+        db.session.add(first_tweet)
+        db.session.commit()
+        response = self.client.delete("/tweets/1")
+        self.assertEqual(response.status_code, 401)
+
+    def test_tweet_patch_with_wrong_auhth_header(self):
+        first_tweet = Tweet(text="First tweet")
+        db.session.add(first_tweet)
+        db.session.commit()
+        response = self.client.patch("/tweets/1", headers={'Authorization': 'azerty'})
+        self.assertEqual(response.status_code, 401)
